@@ -3,7 +3,8 @@ from digitalio import DigitalInOut, Direction, Pull
 from pmk import PMK
 import usb_hid
 from adafruit_hid.keyboard import Keyboard
-from adafruit_hid.keycode import Keycode
+
+from key_actions import key_actions
 
 
 class DummyDisplay:
@@ -29,39 +30,64 @@ class SimpleGPIOHardware:
         return len(self._switches)
 
     def switch_state(self, idx):
-        # Return the inverted state of the switch (True when pressed, False when not pressed)
+        # Return the inverted state of the switch because of Pull.UP
+        # True when pressed, False when not pressed
         return not self._switches[idx].value
 
     def i2c(self):
         return None
 
 
-# Configure the LED pin (Pin 25 in this case)
-led = DigitalInOut(board.GP25)  # Replace GP25 with your LED pin if needed
+# Configure the built-in LED pin
+led = DigitalInOut(board.GP25)
 led.direction = Direction.OUTPUT
 
-pins = [board.GP17, board.GP18]
+pins = [
+    board.GP0, board.GP1, board.GP2, board.GP3, board.GP4,
+    board.GP5, board.GP6, board.GP7, board.GP8, board.GP9,
+    board.GP10, board.GP11, board.GP12, board.GP13, board.GP14,
+    board.GP15, board.GP16, board.GP17, board.GP18, board.GP19,
+    board.GP20, board.GP21, board.GP22, board.GP26, board.GP27, board.GP28
+]
+
 pmk = PMK(SimpleGPIOHardware(pins))
-pmk.keys[0].debounce = 0.005
+
+for key in pmk.keys:
+    key.debounce = 0.005
 
 keyboard = Keyboard(usb_hid.devices)
-keycode = Keycode.ZERO
 
 
-# Define key press handlers
-@pmk.on_press(pmk.keys[0])
-def handle_key0(key):
+def on_key_press(index):
+    print("\tPress: " + str(index))
     led.value = True
-    keyboard.send(Keycode.COMMAND, Keycode.SHIFT, Keycode.LEFT_BRACKET)
+    action = key_actions.get(index, [])  # default to empty action
+    if action:
+        print("\tAction: " + str([hex(x) for x in action]))
+        keyboard.press(*action)
 
 
-@pmk.on_release(pmk.keys[0])
-def handle_key0_release(key):
+def on_key_release(index):
+    print("Release: " + str(index))
     led.value = False
+    action = key_actions.get(index, [])  # default to empty action
+    if action:
+        print("Action: " + str([hex(x) for x in action]))
+        keyboard.release(*action)
 
 
-print("Press the keys connected to GP17 and GP18...")
+# Dynamically register handlers for each button
+for i, key in enumerate(pmk.keys):
+    @pmk.on_press(key)
+    def handle_press(k, idx=i):
+        on_key_press(idx)
+
+
+    @pmk.on_release(key)
+    def handle_release(k, idx=i):
+        on_key_release(idx)
+
+print("Ready!")
 while True:
     # Update the PMK instance to check for key presses
     pmk.update()
-
